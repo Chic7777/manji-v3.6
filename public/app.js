@@ -356,7 +356,8 @@ async function loadChainBadge() {
 
 /** 顶栏常驻的 BOT Chain 入口（数字异步填充，所有 .tc-count 一并更新） */
 function topbarChainChipHtml() {
-  return `<a class="topbar-chain" href="#/chain" title="永恒之链 · BOT Chain 主网存证（链 677）">⛓ BOT Chain<b class="tc-count" style="display:none"></b></a>`;
+  const label = botwallet.isConnected() ? `${botwallet.wallet.address.slice(0, 6)}…${botwallet.wallet.address.slice(-4)}` : '连接钱包';
+  return `<button type="button" class="wallet-launch" data-open-wallet title="我的钱包 · BOT Chain 主网">${label}</button>`;
 }
 
 function updateChainChip() {
@@ -461,14 +462,13 @@ function viewWelcome() {
         <svg class="welcome-mark" viewBox="0 0 32 36" fill="none" aria-hidden="true"><path d="M5 29V15a11 11 0 0 1 22 0v14" stroke="currentColor" stroke-width="1.5"/><path d="M10 29V17a6 6 0 0 1 12 0v12M3 29h26" stroke="currentColor" stroke-width="1.5"/><path d="M12 20c0-3 4-3 4-.8 0-2.2 4-2.2 4 .8 0 2.1-4 4.5-4 4.5S12 22.1 12 20Z" fill="currentColor"/></svg>
         <span>慢记<small>MANJI</small></span>
       </div>
-      <a class="welcome-login" href="#/login">已有小家？<span>登录 <span aria-hidden="true">↗</span></span></a>
+      <div class="welcome-header-actions">${topbarChainChipHtml()}<a class="welcome-login" href="#/login"><span>登录 <span aria-hidden="true">↗</span></span></a></div>
     </header>
 
     <section class="welcome-intro">
       <p class="welcome-eyebrow"><span></span> 两个人，一点一滴</p>
       <h1 id="welcome-heading">把日子，<br>慢慢过成<span class="welcome-us">我们<svg viewBox="0 0 100 10" fill="none" aria-hidden="true"><path d="M3 6c25-5 54-5 94-2M11 9c21-3 49-4 75-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></span>。</h1>
       <p class="welcome-description">收藏平凡的小事，养一只黏人的小狗。<br>让每个「今天」，都有地方安放。</p>
-      <p class="welcome-herochain">⛓ 约定与日记可镌刻上 <b>BOT Chain 主网</b>（链 677）· 小狗可铸链上身份 · <a href="#/verify">免登录核验存证 →</a></p>
     </section>
 
     <figure class="welcome-illustration" aria-label="一只小狗坐在温柔的拱窗前，等待你们回家">
@@ -485,18 +485,6 @@ function viewWelcome() {
       </div>
       <figcaption><span></span> 一间小屋 · 两个人 · 许多以后 <span></span></figcaption>
     </figure>
-
-    <section class="welcome-eternal" aria-label="永恒之链与 BOT Chain 主网存证">
-      <div class="we-chain" aria-hidden="true"><svg viewBox="0 0 96 24" fill="none"><path d="M10 12c0-3.6 2.9-6.5 6.5-6.5H26c3.6 0 6.5 2.9 6.5 6.5s-2.9 6.5-6.5 6.5h-9.5C12.9 18.5 10 15.6 10 12Z" stroke="currentColor" stroke-width="1.6"/><path d="M35.5 12c0-3.6 2.9-6.5 6.5-6.5h9.5c3.6 0 6.5 2.9 6.5 6.5s-2.9 6.5-6.5 6.5H42c-3.6 0-6.5-2.9-6.5-6.5Z" stroke="currentColor" stroke-width="1.6"/><path d="M61 12c0-3.6 2.9-6.5 6.5-6.5H77c3.6 0 6.5 2.9 6.5 6.5s-2.9 6.5-6.5 6.5h-9.5C63.9 18.5 61 15.6 61 12Z" stroke="currentColor" stroke-width="1.6"/></svg></div>
-      <h2 class="we-title">有些话，值得永远作数</h2>
-      <p class="we-copy">约定与日记镌刻进「永恒之链」，再由<b>你们自己的钱包</b>亲手把这一刻的指纹刻上 <b>BOT Chain 主网</b>。从此它不属于任何服务器或公司——任何人，包括我们自己，都无法修改或删除。</p>
-      <div class="we-badges">
-        <span class="we-badge">⛓ BOT Chain 主网 · 链 677</span>
-        <span class="we-badge">连接钱包 · 你亲自签名</span>
-        <a class="we-badge" href="https://scan.botchain.ai" target="_blank" rel="noopener">浏览器公开可查 ↗</a>
-        <a class="we-badge" href="#/verify">免登录核验存证 →</a>
-      </div>
-    </section>
 
     <footer class="welcome-actions">
       <a class="welcome-start" href="#/register"><span>开启我们的小家</span><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 12h15m-6-6 6 6-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></a>
@@ -3533,7 +3521,7 @@ function openAnchorModal({ type, id, snippet, shared }) {
             <div class="anchor-done">
               <div class="seal">⛓</div>
               <h3 style="margin:12px 0 2px">交易已广播 · 等待确认</h3>
-              <p class="muted tiny" style="margin:0 0 8px">钱包已提交交易，尚未确认成功。页面顶部会查询回执，也可在浏览器查看执行状态。</p>
+              <p class="muted tiny" style="margin:0 0 8px">钱包已提交交易，尚未确认成功。点击「我的钱包」可查询回执，也可在浏览器查看执行状态。</p>
               <div class="chain-hash-card">
                 <div><span class="muted tiny">主网交易</span><div class="chain-hash">${txHash}</div></div>
               </div>
@@ -3593,7 +3581,7 @@ function mainnetTagHtml(onChain) {
  * 取 calldata → 确保 BOT 主网 → 钱包签名广播 → 入队并回填交易哈希。返回 {txHash, explorer}。
  */
 async function sealViaWallet(anchorId) {
-  if (transactionForAnchor(anchorId)) throw new Error('这条存证已发起过交易，请在页面顶部查询回执或重新关联交易，勿重复发送');
+  if (transactionForAnchor(anchorId)) throw new Error('这条存证已发起过交易，请在「我的钱包」查询回执或重新关联交易，勿重复发送');
   const cd = await api('GET', `/api/chain/onchain/seal-calldata/${encodeURIComponent(anchorId)}`);
   assertMainnetTarget(cd);
   if (!botwallet.isConnected()) await botwallet.connect();
@@ -3606,7 +3594,7 @@ async function sealViaWallet(anchorId) {
     await api('POST', `/api/chain/onchain/${encodeURIComponent(anchorId)}/bind`, { txHash });
     trackTransaction({ txHash, anchorId, from: sender, syncError: false });
   } catch {
-    toast('交易已发送，应用同步暂时失败。请在顶部重新关联交易，勿重复发送。');
+    toast('交易已发送，应用同步暂时失败。请在「我的钱包」重新关联交易，勿重复发送。');
   }
   return { txHash, explorer: cd.explorer };
 }
@@ -3801,7 +3789,7 @@ async function viewChain() {
 
   /** BOT Chain 主网面板：合约信息 + 连接钱包（C 端主网交互入口） */
   function botchainPanelHtml() {
-    if (!oc) return `<div class="botchain-panel"><h3>BOT Chain 主网存证暂不可用</h3><p>请使用页面顶部的钱包入口。存证接口未就绪、配置不一致或请求失败，本地存证仍可使用。</p><a href="${MAINNET.explorer}/address/${MAINNET.contract}" target="_blank" rel="noopener">查看指定合约 ${MAINNET.contract}</a></div>`;
+    if (!oc) return `<div class="botchain-panel"><h3>BOT Chain 主网存证暂不可用</h3><p>存证接口未就绪、配置不一致或请求失败，本地存证仍可使用。</p><button type="button" class="btn ghost sm" data-open-wallet>查看我的钱包</button><a href="${MAINNET.explorer}/address/${MAINNET.contract}" target="_blank" rel="noopener">查看指定合约 ${MAINNET.contract}</a></div>`;
     const { st } = oc;
     const addrUrl = st.explorer && st.contract ? `${st.explorer}/address/${st.contract}` : null;
     const countChip = typeof st.chainSealCount === 'number'
@@ -3857,14 +3845,7 @@ async function viewChain() {
         : '请安装 MetaMask / OKX 插件，或用钱包 App 内置浏览器打开本站';
       el.innerHTML = `<button class="btn primary sm" id="bc-connect">连接钱包</button><span class="muted tiny">${hint}</span>`;
       const btn = document.getElementById('bc-connect');
-      if (btn) btn.onclick = async () => {
-        try {
-          await botwallet.connect();
-          toast('钱包已连接，正在核对 BOT 主网…');
-          await botwallet.ensureChain();
-          renderWalletArea();
-        } catch (e) { toast(e.message); }
-      };
+      if (btn) btn.onclick = () => document.getElementById('wallet-dialog').showModal();
     } else {
       const right = botwallet.onRightChain();
       const addr = botwallet.wallet.address;

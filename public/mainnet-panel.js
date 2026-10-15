@@ -24,6 +24,7 @@ export function trackTransaction(record) {
   save();
   renderTransaction();
   pollTransaction();
+  document.getElementById('wallet-dialog')?.showModal();
 }
 
 function renderTransaction() {
@@ -118,6 +119,18 @@ function renderWallet() {
 export function mountMainnetPanel() {
   const root = $('mainnet-entry');
   if (!root) return;
+  const dialog = $('wallet-dialog');
+  $('wallet-dialog-close').onclick = () => dialog.close();
+  document.addEventListener('click', (event) => {
+    if (event.target.closest('[data-open-wallet]')) dialog.showModal();
+    if (event.target.closest('#mainnet-entry a[href^="#/"]')) dialog.close();
+  });
+  window.addEventListener('hashchange', () => dialog.close());
+  const updateLaunchers = () => {
+    for (const el of document.querySelectorAll('[data-open-wallet]')) {
+      el.textContent = wallet.isConnected() ? `${wallet.wallet.address.slice(0, 6)}…${wallet.wallet.address.slice(-4)}` : '连接钱包';
+    }
+  };
   root.innerHTML = `<div class="mn-row"><strong>BOT Chain 主网 · 677</strong>
     <select id="mn-provider" aria-label="选择钱包"></select>
     <button class="mn-primary" id="mn-connect">连接钱包 / Connect Wallet</button>
@@ -143,7 +156,7 @@ export function mountMainnetPanel() {
   });
   $('mn-switch').onclick = () => run($('mn-switch'), () => wallet.ensureChain());
   $('mn-disconnect').onclick = wallet.disconnect;
-  wallet.onWalletChange(() => { renderWallet(); pollTransaction(); });
+  wallet.onWalletChange(() => { renderWallet(); updateLaunchers(); pollTransaction(); });
   renderWallet(); renderTransaction();
   fetch('/api/public/onchain/config', { signal: AbortSignal.timeout(8000) })
     .then(async (res) => { if (!res.ok) throw new Error(`配置接口返回 ${res.status}`); return res.json(); })

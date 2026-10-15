@@ -14,7 +14,10 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🐚</text></svg>">
 </head>
 <body>
-  <section id="mainnet-entry" class="mainnet-entry" aria-label="BOT Chain 钱包与主网交易"></section>
+  <dialog id="wallet-dialog" class="wallet-dialog" aria-labelledby="wallet-dialog-title">
+    <header class="wallet-dialog-head"><h2 id="wallet-dialog-title">我的钱包</h2><button type="button" id="wallet-dialog-close" aria-label="关闭钱包">×</button></header>
+    <section id="mainnet-entry" class="mainnet-entry" aria-label="BOT Chain 钱包与主网交易"></section>
+  </dialog>
   <div id="app">
     <div class="loading" style="padding-top:120px"><div class="spin"></div>正在回家…</div>
   </div>
