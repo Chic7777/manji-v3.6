@@ -330,55 +330,10 @@ function topbar({ title = '慢记', en = 'OUR SHARED HOME' } = {}) {
   </header>`;
 }
 
-// ================= v3.6.4 BOT Chain 全局可见性：顶栏常驻徽章 + 首页链上足迹条 =================
-// 数据 60 秒缓存（两个只读接口并行，任一失败静默降级）；徽章先渲染、数字异步补上。
-const chainBadgeState = { at: 0, data: null };
-async function loadChainBadge() {
-  if (chainBadgeState.data && Date.now() - chainBadgeState.at < 60_000) return chainBadgeState.data;
-  try {
-    const [oc, ag] = await Promise.all([
-      api('GET', '/api/chain/onchain/status').catch(() => null),
-      api('GET', '/api/agentos/status').catch(() => null),
-    ]);
-    const data = {
-      sealCount: oc && typeof oc.chainSealCount === 'number' ? oc.chainSealCount : null, // 主网合约登记总数
-      homeSealed: oc && oc.queue ? oc.queue.confirmed || 0 : 0,                          // 这个家已上主网的承诺数
-      puppyTokenId: ag && ag.puppy && ag.puppy.agentTokenId != null ? ag.puppy.agentTokenId : null,
-      puppyName: ag && ag.puppy && ag.puppy.name ? ag.puppy.name : null,
-    };
-    chainBadgeState.data = data;
-    chainBadgeState.at = Date.now();
-    return data;
-  } catch {
-    return chainBadgeState.data;
-  }
-}
-
-/** 顶栏常驻的 BOT Chain 入口（数字异步填充，所有 .tc-count 一并更新） */
+/** 顶栏钱包入口 */
 function topbarChainChipHtml() {
   const label = botwallet.isConnected() ? `${botwallet.wallet.address.slice(0, 6)}…${botwallet.wallet.address.slice(-4)}` : '连接钱包';
   return `<button type="button" class="wallet-launch" data-open-wallet title="我的钱包 · BOT Chain 主网">${label}</button>`;
-}
-
-function updateChainChip() {
-  loadChainBadge()
-    .then((d) => {
-      if (!d) return;
-      for (const el of document.querySelectorAll('.tc-count')) {
-        const label = d.sealCount != null ? String(d.sealCount) : '';
-        el.style.display = label ? '' : 'none';
-        el.textContent = label;
-      }
-      const strip = document.getElementById('chain-strip');
-      if (strip) {
-        const counts = [];
-        if (d.homeSealed > 0) counts.push(`<b>${d.homeSealed}</b> 条承诺已刻上 BOT 主网`);
-        if (d.puppyTokenId != null) counts.push(`${esc(d.puppyName || '小狗')} 有链上身份 <b>#${d.puppyTokenId}</b>`);
-        strip.querySelector('.cs-counts').innerHTML =
-          counts.length > 0 ? counts.join(' · ') : '把值得永远记住的一刻，刻上 BOT Chain 主网（链 677）';
-      }
-    })
-    .catch(() => {});
 }
 
 /** 站内"减少动画"偏好落到根节点，与系统 prefers-reduced-motion 叠加生效（B12） */
@@ -445,7 +400,6 @@ function bindTopbar() {
     btn.addEventListener('click', openNotifications);
     refreshNotifDot();
   }
-  updateChainChip(); // 顶栏 BOT Chain 徽章与首页链上足迹条的数字填充
   const add = document.getElementById('tab-add');
   if (add) add.addEventListener('click', openQuickCreate);
 }
@@ -810,13 +764,6 @@ async function viewHome(generation = routeGeneration) {
   const objects = room.objects.map((o) => ({ slotKey: o.slotKey, templateKey: o.templateKey, memory: o.memory }));
   const keepsakes = objects.length + room.storedCount;
 
-  // 链上足迹横幅：点击进永恒之链；数字由 updateChainChip 异步填充（route 渲染后统一触发）
-  const chainStrip = document.getElementById('chain-strip');
-  if (chainStrip) {
-    chainStrip.onclick = () => { location.hash = '#/chain'; };
-    chainStrip.onkeydown = (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); location.hash = '#/chain'; } };
-  }
-
   // 通知与回顾保留独立入口，让点小狗时完整播放互动。
   const carryNotif = notifItems.find((n) => !n.read_at && n.type === 'memory-shared' && n.source_id);
   let guideItem = null;
@@ -858,14 +805,6 @@ async function viewHome(generation = routeGeneration) {
         <div id="interactive-room" class="interactive-room" aria-label="三只小狗的小屋"><div class="loading"><div class="spin"></div>正在打开小屋…</div></div>
     </div>
     <div class="home-sheet">
-      <div class="chain-strip" id="chain-strip" role="button" tabindex="0" aria-label="查看永恒之链与 BOT Chain 主网存证">
-        <div class="cs-ico" aria-hidden="true">⛓</div>
-        <div class="cs-body">
-          <div class="cs-title serif">我们的链上足迹 · BOT Chain</div>
-          <div class="cs-counts muted tiny">正在读取 BOT 主网…</div>
-        </div>
-        <span class="cs-go" aria-hidden="true">→</span>
-      </div>
       ${story ? `
       <div class="story-card">
         <div class="s-ico">${story.ico}</div>
@@ -3802,15 +3741,12 @@ async function viewChain() {
         <span class="tag chain tiny">${st.modeText} · 链 ${st.chainId}</span>
         ${countChip}
       </div>
-      <p class="bc-value serif">被刻上主网的那一刻，不再依赖任何服务器或公司——任何人，包括我们自己，都无法再修改或删除。</p>
       <div class="bc-meta muted tiny">
-        合约 ${st.contract}${addrUrl ? `（<a class="mono-link" target="_blank" rel="noopener" href="${addrUrl}">${shortHex(st.contract)} · 浏览器</a>）` : ''}
-        ${st.explorer ? ` · <a class="mono-link" target="_blank" rel="noopener" href="${st.explorer}">scan.botchain.ai</a>` : ''}
+        合约 ${addrUrl ? `<a class="mono-link" target="_blank" rel="noopener" href="${addrUrl}">${shortHex(st.contract)}</a>` : shortHex(st.contract)}
       </div>
       ${headAnchorHtml()}
       <div class="bc-wallet" id="bc-wallet"></div>
-      <p class="muted tiny" style="margin:8px 0 0">上链的只有内容指纹（哈希），不含正文和照片；钱包直发时，钱包地址公开可见。成功登记后不可撤回。· <a href="#/verify">任何人可免登录核验 →</a></p>
-      <p class="bc-why muted tiny" style="margin:8px 0 0"><b>为什么必须上链：</b>本地链只能防意外改动；只有 BOT Chain 主网能让「任何人——包括慢记自己」都无法篡改、倒填或删除，且慢记哪天不在了，凭据依然可验。这一层，服务器给不了。</p>
+      <p class="muted tiny" style="margin:8px 0 0">只上链内容指纹，不含正文和照片；钱包地址公开可见，登记后不可撤回。· <a href="#/verify">免登录核验 →</a></p>
     </div>`;
   }
 
@@ -3840,12 +3776,7 @@ async function viewChain() {
     const el = document.getElementById('bc-wallet');
     if (!el || !oc) return;
     if (!botwallet.isConnected()) {
-      const hint = botwallet.hasWallet()
-        ? '连接后即可用你的钱包直接签名上链'
-        : '请安装 MetaMask / OKX 插件，或用钱包 App 内置浏览器打开本站';
-      el.innerHTML = `<button class="btn primary sm" id="bc-connect">连接钱包</button><span class="muted tiny">${hint}</span>`;
-      const btn = document.getElementById('bc-connect');
-      if (btn) btn.onclick = () => document.getElementById('wallet-dialog').showModal();
+      el.innerHTML = '';
     } else {
       const right = botwallet.onRightChain();
       const addr = botwallet.wallet.address;
@@ -3928,16 +3859,7 @@ async function viewChain() {
   /** 链上小狗卡：自托管 ManjiPuppyIdentity 的四态（未配置 / 未铸造 / 铸造中 / 已铸造） */
   function puppyCardHtml() {
     if (!ag) return '';
-    if (ag.mode !== 'self') {
-      return `
-      <div class="puppy-card" id="puppy-card">
-        <div class="pc-head">
-          <div class="pc-title serif">🐕 链上小狗</div>
-          <span class="tag plain tiny">等待接入</span>
-        </div>
-        <p class="muted tiny" style="margin:8px 0 0">链上小狗身份（名字上链、链上生日、存钱罐）已就绪——等待服务端配置小狗身份合约（PUPPY_IDENTITY_CONTRACT）。</p>
-      </div>`;
-    }
+    if (ag.mode !== 'self') return '';
     const totalChip = typeof ag.totalPuppies === 'number' && ag.totalPuppies > 0
       ? `<span class="tag chain tiny" title="链上小狗身份合约已铸造的总数">链上已有 ${ag.totalPuppies} 只小狗</span>`
       : '';
@@ -4152,12 +4074,7 @@ async function viewChain() {
       <p class="muted tiny">${archived ? '链上只保存指纹；无权查看的部分不在此展示。' : '在约定或日记里点「镌刻上链」，把值得永远记住的一刻接到链上。'}</p>
       ${archived ? '' : '<a class="btn ghost" href="#/promises">去看看约定</a>'}</div>` : ''}
     <div class="chain-list">${heights.map(blockHtml).join('')}</div>
-    <div class="card soft" style="margin-top:14px">
-      <div class="serif" style="margin-bottom:6px">这条链是什么</div>
-      <p class="muted tiny" style="margin:0 0 8px">它由一块块哈希首尾相连：每一块都攥着上一块的指纹，所以改掉任何一块，后面全部对不上——<b>按当前规则可校验、不可篡改</b>。</p>
-      <p class="muted tiny" style="margin:0 0 8px">${esc(c.honesty || '')}</p>
-      <div class="btn-row"><button class="btn ghost sm" id="btn-export-chain">导出整条链（JSON）</button></div>
-    </div>
+    <div class="btn-row" style="margin-top:14px"><button class="btn ghost sm" id="btn-export-chain">导出整条链（JSON）</button></div>
   </div>
   ${tabbar('memorial')}`;
 

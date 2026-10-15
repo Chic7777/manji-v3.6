@@ -834,38 +834,6 @@ button:focus-visible, a:focus-visible, .tab:focus-visible, input:focus-visible, 
 .chain-meta { margin: 2px 0 4px 2px; }
 .chain-proof { margin-top: 8px; }
 
-/* ================= v3.6.4 · BOT Chain 全局可见性（顶栏徽章 + 首页链上足迹条） ================= */
-.topbar-chain {
-  margin-left: auto; margin-right: 10px;
-  display: inline-flex; align-items: center; gap: 5px;
-  padding: 5px 11px; border-radius: 999px;
-  background: #F6E7CB; color: #8A6420; font-size: 11px; font-weight: 600;
-  text-decoration: none; white-space: nowrap; border: 1px solid #E7CFA5;
-  transition: background .15s;
-}
-.topbar-chain:active { transform: scale(0.97); }
-.topbar-chain .tc-count {
-  display: inline-flex; min-width: 16px; height: 16px; align-items: center; justify-content: center;
-  padding: 0 4px; border-radius: 999px; background: #8A6420; color: #FFF8E8; font-size: 9.5px; font-weight: 700;
-}
-.chain-strip {
-  display: flex; align-items: center; gap: 12px;
-  padding: 13px 15px; margin-bottom: 12px;
-  border: 1px solid #E7CFA5; border-radius: 14px;
-  background: linear-gradient(135deg, #FDF6E9, #F8EED6);
-  cursor: pointer; user-select: none;
-}
-.chain-strip .cs-ico {
-  width: 38px; height: 38px; flex: 0 0 38px; border-radius: 12px;
-  display: flex; align-items: center; justify-content: center; font-size: 19px;
-  background: #F1E2BF;
-}
-.chain-strip .cs-body { flex: 1; min-width: 0; }
-.chain-strip .cs-title { font-size: 15px; font-weight: 600; color: #6B5420; }
-.chain-strip .cs-counts { margin-top: 2px; }
-.chain-strip .cs-counts b { color: #4A7B3A; font-weight: 700; }
-.chain-strip .cs-go { color: #B99A4E; font-size: 18px; font-weight: 700; }
-
 /* ================= v3.6 · BOT Chain 主网面板与主网状态徽章 ================= */
 .botchain-panel {
   background: linear-gradient(135deg, #FDF6E9, #FBF1DC);
@@ -883,12 +851,10 @@ button:focus-visible, a:focus-visible, .tab:focus-visible, input:focus-visible, 
 .bc-anchor.ok b { font-weight: 700; }
 .bc-anchor.bad { background: #F9E0DC; color: #A25043; }
 .bc-anchor:not(.ok):not(.bad) { background: #F6E7CB; color: #8A6420; }
-.bc-why { border-top: 1px dashed #EAD9B8; padding-top: 8px; }
-.bc-why b { color: #6B5420; }
 .bc-title { font-size: 16px; }
-.bc-value { margin: 8px 0 0; font-size: 14px; line-height: 1.8; color: #6B5420; }
 .bc-meta { margin: 6px 0 0 2px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .bc-wallet { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.bc-wallet:empty { display: none; }
 .mono-link {
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
   font-size: 11px; color: var(--coffee); text-decoration: underline; text-underline-offset: 2px;
