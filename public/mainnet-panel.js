@@ -1,11 +1,28 @@
 import * as wallet from './wallet.js';
-import { MAINNET, assertMainnetTarget } from './mainnet.js';
+import { MAINNET } from './mainnet.js';
 
 const STORAGE_KEY = 'manji.mainnet.transaction.v1';
 const $ = (id) => document.getElementById(id);
 let transaction = null;
 let polling = false;
 let pollTimer = null;
+let connectionBusy = false;
+let pendingProvider = '';
+
+const walletIcons = {
+  metamask: '<svg viewBox="0 0 40 40" aria-hidden="true"><path fill="#E17726" d="m5 7 12 9-3 8-8-3zM35 7l-12 9 3 8 8-3z"/><path fill="#F6851B" d="m8 17 12-5 12 5-3 15-9 5-9-5z"/><path fill="#763D16" d="m12 24 6 2-4 3zM28 24l-6 2 4 3z"/><path fill="#E27625" d="m20 12-3 13 3 6 3-6z"/><path fill="#C0AD9E" d="m14 30 6 2 6-2-2 5h-8z"/></svg>',
+  okx: '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="3" y="3" width="34" height="34" rx="10" fill="#171917"/><path fill="#fff" d="M10 10h6v6h-6zm14 0h6v6h-6zm-7 7h6v6h-6zm-7 7h6v6h-6zm14 0h6v6h-6z"/></svg>',
+  tokenpocket: '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="3" y="3" width="34" height="34" rx="10" fill="#2980F0"/><path fill="#fff" d="M9 12h15v5h-5v13h-5V17H9zm14 7h4a5 5 0 0 1 0 10h-4v-4h4a1 1 0 0 0 0-2h-4z"/></svg>',
+  other: '<svg viewBox="0 0 40 40" fill="none" aria-hidden="true"><rect x="6" y="10" width="28" height="22" rx="6" stroke="currentColor" stroke-width="2"/><path d="m9 10 17-5v5m0 9h9v8h-9a4 4 0 0 1 0-8Z" stroke="currentColor" stroke-width="2"/><circle cx="28" cy="23" r="1" fill="currentColor"/></svg>',
+};
+
+function providerBrand(p) {
+  const name = p.name.toLowerCase();
+  if (/okx|okex/.test(name) || p.provider.isOkxWallet || p.provider.isOKExWallet) return 'okx';
+  if (/metamask/.test(name) || p.provider.isMetaMask) return 'metamask';
+  if (/tokenpocket/.test(name) || p.provider.isTokenPocket) return 'tokenpocket';
+  return 'other';
+}
 try {
   const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
   if (saved && /^0x[0-9a-f]{64}$/i.test(saved.txHash) && saved.contract?.toLowerCase() === MAINNET.contract.toLowerCase()) transaction = saved;
@@ -98,22 +115,59 @@ async function pollTransaction() {
 }
 
 function renderWallet() {
-  const status = $('mn-wallet-state');
-  if (!status) return;
+  if (!$('mn-wallet-picker')) return;
   const connected = wallet.isConnected();
-  status.textContent = connected ? `${wallet.wallet.address.slice(0, 6)}…${wallet.wallet.address.slice(-4)} · ${wallet.onRightChain() ? 'BOT 主网 677' : '请切换主网'}` : '支持 MetaMask / OKX Wallet';
-  $('mn-connect').hidden = connected;
+  $('wallet-dialog-title').textContent = connected ? '我的钱包' : '连接钱包';
+  $('mn-wallet-picker').hidden = connected;
+  $('mn-account').hidden = !connected;
+  $('mn-wallet-state').textContent = connected ? `${wallet.wallet.address.slice(0, 6)}…${wallet.wallet.address.slice(-4)}` : '';
+  $('mn-network').textContent = wallet.onRightChain() ? 'BOT Chain' : '待切换网络';
   $('mn-disconnect').hidden = !connected;
   $('mn-switch').hidden = !connected || wallet.onRightChain();
-  const select = $('mn-provider');
-  const previous = select.value;
-  select.replaceChildren();
-  for (const provider of wallet.listProviders()) {
-    const option = document.createElement('option');
-    option.value = provider.id; option.textContent = provider.name; select.append(option);
+  const list = $('mn-wallet-picker');
+  list.replaceChildren();
+  const providers = wallet.listProviders();
+  const choices = [
+    { brand: 'metamask', name: 'MetaMask' },
+    { brand: 'okx', name: 'OKX Wallet' },
+    { brand: 'tokenpocket', name: 'TokenPocket' },
+  ];
+  for (const p of providers.filter((p) => providerBrand(p) === 'other')) {
+    choices.push({ brand: 'other', name: p.name, provider: p });
   }
-  if ([...select.options].some((o) => o.value === previous)) select.value = previous;
-  select.hidden = connected || !select.options.length;
+  for (const choice of choices) {
+    const p = choice.provider || providers.find((p) => providerBrand(p) === choice.brand);
+    const button = document.createElement('button');
+    button.className = 'mn-wallet-choice';
+    button.type = 'button';
+    button.disabled = !p || connectionBusy;
+    const icon = document.createElement('span');
+    icon.className = `mn-wallet-icon mn-icon-${choice.brand}`;
+    icon.innerHTML = walletIcons[choice.brand];
+    const name = document.createElement('span');
+    name.className = 'mn-wallet-name'; name.textContent = choice.name;
+    const state = document.createElement('span');
+    state.className = 'mn-wallet-hint';
+    state.textContent = !p ? '未安装' : pendingProvider === p.id ? '等待授权…' : '↗';
+    button.append(icon, name, state);
+    if (p) button.onclick = async () => {
+      if (connectionBusy) return;
+      connectionBusy = true; pendingProvider = p.id;
+      $('mn-message').textContent = ''; renderWallet();
+      try {
+        wallet.selectProvider(p.id);
+        await wallet.connect();
+        await wallet.ensureChain();
+        pollTransaction();
+        $('wallet-dialog').close();
+      } catch (e) {
+        $('mn-message').textContent = Number(e.code) === 4001 ? '已取消连接' : Number(e.code) === -32002 ? '请在钱包窗口完成授权' : e.message;
+      } finally {
+        connectionBusy = false; pendingProvider = ''; renderWallet();
+      }
+    };
+    list.append(button);
+  }
 }
 
 export function mountMainnetPanel() {
@@ -122,7 +176,7 @@ export function mountMainnetPanel() {
   const dialog = $('wallet-dialog');
   $('wallet-dialog-close').onclick = () => dialog.close();
   document.addEventListener('click', (event) => {
-    if (event.target.closest('[data-open-wallet]')) dialog.showModal();
+    if (event.target.closest('[data-open-wallet]')) { renderWallet(); dialog.showModal(); }
     if (event.target.closest('#mainnet-entry a[href^="#/"]')) dialog.close();
   });
   window.addEventListener('hashchange', () => dialog.close());
@@ -131,18 +185,14 @@ export function mountMainnetPanel() {
       el.textContent = wallet.isConnected() ? `${wallet.wallet.address.slice(0, 6)}…${wallet.wallet.address.slice(-4)}` : '连接钱包';
     }
   };
-  root.innerHTML = `<div class="mn-row"><strong>BOT Chain 主网 · 677</strong>
-    <select id="mn-provider" aria-label="选择钱包"></select>
-    <button class="mn-primary" id="mn-connect">连接钱包 / Connect Wallet</button>
-    <button id="mn-switch" hidden>切换 BOT 主网</button><button id="mn-disconnect" hidden>断开</button>
-    <a href="#/chain">主网存证 →</a></div>
-    <div id="mn-wallet-state"></div>
-    <details><summary>合约地址与交易说明</summary>
-      <a class="mn-address" href="${MAINNET.explorer}/address/${MAINNET.contract}" target="_blank" rel="noopener noreferrer">${MAINNET.contract} ↗</a>
-      <p>在日记或约定中先完成本地存证，再选择「提交到 BOT 主网」。交易由你的钱包确认，需要少量 BOT 支付 Gas；链上只保存内容哈希，钱包地址公开。</p>
-      <p>合约是否允许当前钱包写入，会在发送前模拟检查。若权限受限，连接钱包本身不会获得写入权限。</p>
-      <a href="#/verify">公开核验存证</a>
-    </details><p id="mn-config" role="status">正在核对服务端配置…</p>
+  root.innerHTML = `<div id="mn-wallet-picker" class="mn-wallet-picker" aria-label="选择钱包"></div>
+    <div id="mn-account" hidden>
+      <div class="mn-account-badge" aria-hidden="true">✳</div>
+      <div id="mn-wallet-state" class="mn-account-address"></div>
+      <div class="mn-account-network"><span></span><span id="mn-network">BOT Chain</span></div>
+      <div class="mn-account-actions"><a href="#/chain">我的存证 ↗</a><button type="button" id="mn-switch" hidden>切换网络</button><button type="button" id="mn-disconnect" hidden>断开连接</button></div>
+      <div class="mn-account-links"><a href="${MAINNET.explorer}/address/${MAINNET.contract}" target="_blank" rel="noopener noreferrer">查看合约 ↗</a><a href="#/verify">核验存证 ↗</a></div>
+    </div>
     <p id="mn-message" class="mn-error" role="status" aria-live="polite"></p>
     <div id="mn-transaction" aria-live="polite" hidden></div>`;
   const run = async (button, action) => {
@@ -150,20 +200,8 @@ export function mountMainnetPanel() {
     try { await action(); } catch (e) { $('mn-message').textContent = Number(e.code) === 4001 ? '你取消了钱包操作，可以稍后重试。' : e.message; }
     finally { button.disabled = false; renderWallet(); }
   };
-  $('mn-connect').onclick = () => run($('mn-connect'), async () => {
-    if ($('mn-provider').value) wallet.selectProvider($('mn-provider').value);
-    await wallet.connect(); await wallet.ensureChain(); pollTransaction();
-  });
   $('mn-switch').onclick = () => run($('mn-switch'), () => wallet.ensureChain());
   $('mn-disconnect').onclick = wallet.disconnect;
   wallet.onWalletChange(() => { renderWallet(); updateLaunchers(); pollTransaction(); });
   renderWallet(); renderTransaction();
-  fetch('/api/public/onchain/config', { signal: AbortSignal.timeout(8000) })
-    .then(async (res) => { if (!res.ok) throw new Error(`配置接口返回 ${res.status}`); return res.json(); })
-    .then(({ data }) => {
-      assertMainnetTarget(data);
-      if (!data.configured) throw new Error('后端未启用主网存证');
-      $('mn-config').textContent = '服务端已配置指定合约 · 实际写入权限需钱包模拟核验';
-    })
-    .catch((e) => { $('mn-config').textContent = `主网服务暂不可用：${e.message}。钱包入口仍可使用；请部署配套后端。`; $('mn-config').className = 'mn-error'; });
 }
