@@ -131,7 +131,7 @@ export function assertConfigured() {
 }
 
 export function explorerTxUrl(txHash) {
-  return config.onchain.explorer && txHash ? `${config.onchain.explorer.replace(/\/$/, '')}/tx/${txHash}` : null;
+  return config.onchain.explorer && txHash ? `${config.onchain.explorer.replace(/\/$/, '')}/tx/0x${txHash.replace(/^0x/, '')}` : null;
 }
 
 /** 浏览器根地址（页面用它拼 /address/合约、/tx/交易 链接） */
@@ -369,6 +369,9 @@ export function bindTx(anchorId, txHash) {
   const row = sealRowOf(anchorId);
   if (!row) throw Object.assign(new Error('没有这条待办'), { statusCode: 404 });
   if (row.status === 'confirmed') return sealRowOf(anchorId);
+  if (row.status === 'submitted' && row.tx_hash && row.tx_hash !== txHash) {
+    throw Object.assign(new Error('已有交易等待确认，请先核验原交易，不要覆盖或重复提交'), { statusCode: 409 });
+  }
   db.prepare('UPDATE public_seals SET status = ?, tx_hash = ?, error = NULL, updated_at = ? WHERE id = ?').run('submitted', txHash, nowIso(), anchorId);
   return sealRowOf(anchorId);
 }
@@ -394,6 +397,28 @@ function markFailed(anchorId, message) {
  * 3) 其余保持等待。
  */
 export async function refreshSealRow(row) {
+  // 有 Hash 时必须核验这笔交易的成功回执和对应 Sealed 事件。
+  // 不能拿另一笔交易的 Hash，配合已登记的承诺，冒充本次用户钱包交易成功。
+  if (row.tx_hash) {
+    try {
+      const receipt = await rpc('eth_getTransactionReceipt', ['0x' + row.tx_hash.replace(/^0x/, '')]);
+      if (!receipt) return { row: sealRowOf(row.id), checked: true, found: false };
+      const matching = (receipt.logs || []).find((log) =>
+        String(log.address).toLowerCase() === config.onchain.contract &&
+        log.topics?.[0]?.toLowerCase() === SEALED_EVENT_TOPIC &&
+        log.topics?.[1]?.replace(/^0x/, '').toLowerCase() === row.commitment.toLowerCase()
+      );
+      const words = (matching?.data || '').replace(/^0x/, '').match(/.{64}/g) || [];
+      if (receipt.status !== '0x1' || receipt.to?.toLowerCase() !== config.onchain.contract || words.length < 2) {
+        markFailed(row.id, '交易未成功登记这条承诺，请核对交易状态、目标合约和 Sealed 事件');
+        return { row: sealRowOf(row.id), checked: true, found: false };
+      }
+      markConfirmed(row.id, Number(BigInt('0x' + words[0])), Number(BigInt('0x' + words[1])), row.tx_hash);
+      return { row: sealRowOf(row.id), checked: true, found: true };
+    } catch (err) {
+      return { row: { ...row, lastError: err.message }, checked: false, found: false };
+    }
+  }
   try {
     const onchain = await verifyCommitmentOnChain(row.commitment);
     if (onchain.found) {
@@ -402,16 +427,6 @@ export async function refreshSealRow(row) {
     }
   } catch (err) {
     return { row: { ...row, lastError: err.message }, checked: false, found: false };
-  }
-  if (row.tx_hash) {
-    const receipt = await rpc('eth_getTransactionReceipt', [row.tx_hash]).catch(() => null);
-    if (receipt) {
-      if (receipt.status === '0x1') {
-        return { row: sealRowOf(row.id), checked: true, found: false }; // 成功但 sealOf 尚未可见：下轮自愈
-      }
-      markFailed(row.id, `交易 ${row.tx_hash} 在链上执行失败（reverted）`);
-      return { row: sealRowOf(row.id), checked: true, found: false };
-    }
   }
   return { row: sealRowOf(row.id), checked: true, found: false };
 }

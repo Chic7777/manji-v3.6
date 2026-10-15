@@ -14,7 +14,8 @@
     "test:onchain": "node tests/onchain-acceptance.mjs",
     "test:agentos": "node tests/agentos-acceptance.mjs",
     "compile:contract": "node scripts/compile-contract.mjs",
-    "test:navigation": "node --test tests/navigation.test.mjs"
+    "test:navigation": "node --test tests/navigation.test.mjs",
+    "test:wallet": "node --test tests/config.test.mjs tests/wallet.test.mjs tests/mainnet-api.test.mjs"
   },
   "optionalDependencies": {
     "ethers": "^6.17.0"

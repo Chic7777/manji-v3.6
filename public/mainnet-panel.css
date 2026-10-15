@@ -1,0 +1,15 @@
+.mainnet-entry{position:sticky;top:0;z-index:20;padding:12px max(16px,calc((100% - 760px)/2));background:#fff8f1;border-bottom:1px solid #ddc9b9;color:#503c31;font:13px/1.6 system-ui,sans-serif}
+.mainnet-entry .mn-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mainnet-entry strong{margin-right:auto;font-size:14px}
+.mainnet-entry button,.mainnet-entry select{font:inherit;border:1px solid #bda99a;border-radius:18px;padding:7px 12px;background:#fffdf9;color:#503c31;cursor:pointer}
+.mainnet-entry button.mn-primary{background:#694734;color:white;border-color:#694734}
+.mainnet-entry button:disabled{opacity:.6;cursor:wait}
+.mainnet-entry a{color:#805138;text-underline-offset:3px}
+.mainnet-entry details{margin-top:6px}
+.mainnet-entry summary{cursor:pointer}
+.mainnet-entry .mn-address{overflow-wrap:anywhere;font-family:monospace}
+.mainnet-entry p{margin:6px 0 0}
+.mainnet-entry .mn-error{color:#a22f2a}
+.mainnet-entry .mn-success{color:#386442}
+.mainnet-entry #mn-transaction{border-top:1px solid #ddc9b9;margin-top:8px;padding-top:6px;overflow-wrap:anywhere}
+@media(max-width:480px){.mainnet-entry{padding:10px 14px}.mainnet-entry .mn-row{gap:7px}.mainnet-entry select{max-width:145px}.mainnet-entry strong{width:100%}}

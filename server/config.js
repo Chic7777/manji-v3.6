@@ -2,8 +2,10 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
+import { MAINNET } from '../public/mainnet.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const platformKeys = new Set(Object.keys(process.env));
 
 function loadDotEnv() {
   const file = path.join(ROOT, '.env');
@@ -15,7 +17,7 @@ function loadDotEnv() {
   }
   for (const line of text.split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+    if (m && !platformKeys.has(m[1])) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
   }
 }
 loadDotEnv();
@@ -31,7 +33,7 @@ function loadDotEnvLocal() {
   }
   for (const line of text.split(/\r?\n/)) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/);
-    if (m && process.env[m[1]] === undefined) process.env[m[1]] = m[2];
+    if (m && !platformKeys.has(m[1])) process.env[m[1]] = m[2].replace(/^(['"])(.*)\1$/, '$2');
   }
 }
 loadDotEnvLocal();
@@ -50,17 +52,17 @@ export const config = {
   maxTextChars: int(process.env.MAX_TEXT_CHARS, 500),
   inviteTtlDays: 7,
   chainDifficulty: int(process.env.CHAIN_DIFFICULTY, 4),
-  version: '3.6.0',
+  version: '3.6.6',
   adminDisplayName: process.env.ADMIN_DISPLAY_NAME || 'admin',
   adminPassword: process.env.ADMIN_PASSWORD || 'admin-2026',
   // v3.6 公共链锚定（BOT Chain / 任意 EVM 兼容链）。三项都配置后功能开启；
   // 再配置 ONCHAIN_RELAYER_KEY（需 npm i ethers）则由后台自动代提交，否则手动模式。
   onchain: {
-    rpcUrl: process.env.ONCHAIN_RPC_URL || '',
-    chainId: int(process.env.ONCHAIN_CHAIN_ID, 0),
-    contract: (process.env.ONCHAIN_CONTRACT || '').toLowerCase(),
+    rpcUrl: process.env.ONCHAIN_RPC_URL ?? MAINNET.rpc,
+    chainId: int(process.env.ONCHAIN_CHAIN_ID ?? MAINNET.chainId, 0),
+    contract: (process.env.ONCHAIN_CONTRACT ?? MAINNET.contract).toLowerCase(),
     relayerKey: process.env.ONCHAIN_RELAYER_KEY || '',
-    explorer: process.env.ONCHAIN_EXPLORER || (Number(process.env.ONCHAIN_CHAIN_ID) === 677 ? 'https://scan.botchain.ai' : 'https://scan.bohr.life'),
+    explorer: process.env.ONCHAIN_EXPLORER || (Number(process.env.ONCHAIN_CHAIN_ID ?? MAINNET.chainId) === 677 ? MAINNET.explorer : 'https://scan.bohr.life'),
   },
   // v3.6 Agent OS（BOT Chain 官方托管 API）：小狗的链上身份（ERC-8004 NFT）+ 托管钱包。
   // AGENTOS_API_KEY（ak_ 前缀，只显示一次）只放 .env.local；未配置（空）时功能整体 off，

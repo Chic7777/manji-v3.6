@@ -1,0 +1,18 @@
+services:
+  manji:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4173:4173"
+    environment:
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in the server .env}
+      ONCHAIN_RPC_URL: https://rpc.botchain.ai
+      ONCHAIN_CHAIN_ID: "677"
+      ONCHAIN_CONTRACT: "0xDf6d55959BD6abCdE5750D800F782637115b672D"
+      ONCHAIN_EXPLORER: https://scan.botchain.ai
+      ONCHAIN_RELAYER_KEY: ""
+      PUPPY_IDENTITY_CONTRACT: ""
+    volumes:
+      - manji-data:/data
+volumes:
+  manji-data:

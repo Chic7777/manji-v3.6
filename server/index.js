@@ -41,6 +41,7 @@ const PUBLIC_ROUTES = new Set([
   'GET /api/invites/preview',
   // 公开核验门户（免登录）：只暴露链上本来就公开的事实
   'GET /api/public/onchain/info',
+  'GET /api/public/onchain/config',
   'GET /api/public/onchain/lookup',
 ]);
 

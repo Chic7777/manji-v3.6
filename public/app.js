@@ -3,10 +3,13 @@ import { dogSVG, objectIcon, tabIcon, bellIcon, toolIcon, dogPoseImg } from './a
 import { mountRoom } from './room/room.js';
 import { mountPuppyHero } from './puppy/puppy3d.js';
 import * as botwallet from './wallet.js';
+import { MAINNET, assertMainnetTarget } from './mainnet.js';
+import { mountMainnetPanel, trackTransaction, transactionForAnchor } from './mainnet-panel.js';
 
 // ================= 工具 =================
 const $app = document.getElementById('app');
-const APP_VERSION = '3.5.0';
+const APP_VERSION = '3.6.6';
+mountMainnetPanel();
 const esc = (s) =>
   String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const newIdemKey = () =>
@@ -3529,8 +3532,8 @@ function openAnchorModal({ type, id, snippet, shared }) {
           modalEl.innerHTML = `
             <div class="anchor-done">
               <div class="seal">⛓</div>
-              <h3 style="margin:12px 0 2px">已刻上 BOT 主网</h3>
-              <p class="muted tiny" style="margin:0 0 8px">这一刻的指纹已由你的钱包写进 BOT Chain，等待出块确认后永久不可修改。</p>
+              <h3 style="margin:12px 0 2px">交易已广播 · 等待确认</h3>
+              <p class="muted tiny" style="margin:0 0 8px">钱包已提交交易，尚未确认成功。页面顶部会查询回执，也可在浏览器查看执行状态。</p>
               <div class="chain-hash-card">
                 <div><span class="muted tiny">主网交易</span><div class="chain-hash">${txHash}</div></div>
               </div>
@@ -3544,7 +3547,7 @@ function openAnchorModal({ type, id, snippet, shared }) {
         } catch (e) {
           closeModal();
           if (/未检测到浏览器钱包/.test(e.message)) {
-            toast('未检测到钱包插件：可去永恒之链页由服务端代提交');
+            toast('未检测到钱包插件：请安装 MetaMask / OKX，或用钱包 App 内置浏览器打开本站');
             location.hash = '#/chain';
           } else {
             toast(e.message);
@@ -3590,12 +3593,21 @@ function mainnetTagHtml(onChain) {
  * 取 calldata → 确保 BOT 主网 → 钱包签名广播 → 入队并回填交易哈希。返回 {txHash, explorer}。
  */
 async function sealViaWallet(anchorId) {
+  if (transactionForAnchor(anchorId)) throw new Error('这条存证已发起过交易，请在页面顶部查询回执或重新关联交易，勿重复发送');
   const cd = await api('GET', `/api/chain/onchain/seal-calldata/${encodeURIComponent(anchorId)}`);
+  assertMainnetTarget(cd);
   if (!botwallet.isConnected()) await botwallet.connect();
-  if (!botwallet.onRightChain()) await botwallet.ensureChain();
-  const txHash = await botwallet.sendTx({ to: cd.contract, data: cd.calldata });
-  await api('POST', `/api/chain/onchain/${encodeURIComponent(anchorId)}`).catch(() => {});
-  await api('POST', `/api/chain/onchain/${encodeURIComponent(anchorId)}/bind`, { txHash });
+  const sender = botwallet.wallet.address;
+  await botwallet.preflight({ to: cd.contract, data: cd.calldata });
+  const txHash = await botwallet.sendTx({ to: cd.contract, data: cd.calldata, from: sender });
+  // 广播后先保存 Hash。即使后端暂时离线，也保留回执入口，避免用户重复发送。
+  trackTransaction({ txHash, anchorId, from: sender, syncError: true });
+  try {
+    await api('POST', `/api/chain/onchain/${encodeURIComponent(anchorId)}/bind`, { txHash });
+    trackTransaction({ txHash, anchorId, from: sender, syncError: false });
+  } catch {
+    toast('交易已发送，应用同步暂时失败。请在顶部重新关联交易，勿重复发送。');
+  }
   return { txHash, explorer: cd.explorer };
 }
 
@@ -3725,8 +3737,9 @@ async function viewChain() {
         api('GET', '/api/chain/onchain/status'),
         api('GET', '/api/chain/onchain'),
       ]);
+      assertMainnetTarget(st);
       if (st.mode !== 'off') oc = { st, items: list.items || [] };
-    } catch { /* 面板隐藏 */ }
+    } catch (e) { console.warn('[manji] 主网面板不可用：', e.message); }
   }
   // v3.6 Agent OS：链上小狗身份卡（独立于上面的 BOT Chain 存证面板；接口缺失或未配置时静默降级，不影响本地链）
   let ag = null;
@@ -3788,7 +3801,7 @@ async function viewChain() {
 
   /** BOT Chain 主网面板：合约信息 + 连接钱包（C 端主网交互入口） */
   function botchainPanelHtml() {
-    if (!oc) return '';
+    if (!oc) return `<div class="botchain-panel"><h3>BOT Chain 主网存证暂不可用</h3><p>请使用页面顶部的钱包入口。存证接口未就绪、配置不一致或请求失败，本地存证仍可使用。</p><a href="${MAINNET.explorer}/address/${MAINNET.contract}" target="_blank" rel="noopener">查看指定合约 ${MAINNET.contract}</a></div>`;
     const { st } = oc;
     const addrUrl = st.explorer && st.contract ? `${st.explorer}/address/${st.contract}` : null;
     const countChip = typeof st.chainSealCount === 'number'
@@ -3808,7 +3821,7 @@ async function viewChain() {
       </div>
       ${headAnchorHtml()}
       <div class="bc-wallet" id="bc-wallet"></div>
-      <p class="muted tiny" style="margin:8px 0 0">上链的只有这句话的指纹（哈希），没有正文、照片或成员身份；登记一旦确认永久不可撤回。连接钱包后，由<b>你的钱包</b>直接签名把承诺写上 BOT 主网。· <a href="#/verify">任何人可免登录核验 →</a></p>
+      <p class="muted tiny" style="margin:8px 0 0">上链的只有内容指纹（哈希），不含正文和照片；钱包直发时，钱包地址公开可见。成功登记后不可撤回。· <a href="#/verify">任何人可免登录核验 →</a></p>
       <p class="bc-why muted tiny" style="margin:8px 0 0"><b>为什么必须上链：</b>本地链只能防意外改动；只有 BOT Chain 主网能让「任何人——包括慢记自己」都无法篡改、倒填或删除，且慢记哪天不在了，凭据依然可验。这一层，服务器给不了。</p>
     </div>`;
   }
@@ -3841,14 +3854,14 @@ async function viewChain() {
     if (!botwallet.isConnected()) {
       const hint = botwallet.hasWallet()
         ? '连接后即可用你的钱包直接签名上链'
-        : '未检测到钱包插件：也可由服务端代提交（下方按钮提交时自动选择）';
+        : '请安装 MetaMask / OKX 插件，或用钱包 App 内置浏览器打开本站';
       el.innerHTML = `<button class="btn primary sm" id="bc-connect">连接钱包</button><span class="muted tiny">${hint}</span>`;
       const btn = document.getElementById('bc-connect');
       if (btn) btn.onclick = async () => {
         try {
           await botwallet.connect();
           toast('钱包已连接，正在核对 BOT 主网…');
-          await botwallet.ensureChain().catch(() => {});
+          await botwallet.ensureChain();
           renderWalletArea();
         } catch (e) { toast(e.message); }
       };
@@ -3865,39 +3878,25 @@ async function viewChain() {
     }
   }
 
-  /** 提交一条承诺到 BOT 主网：优先用户钱包直发（v2 合约开放写入），否则走服务端 relayer */
+  /** 用户钱包直发；旧合约实际权限由发送前模拟判定，不静默改为代发。 */
   async function submitToMainnet(anchorId) {
     if (!oc) return;
+    const button = $app.querySelector(`[data-seal="${anchorId}"]`);
+    if (button?.disabled) return;
+    if (button) button.disabled = true;
     try {
-      if (!botwallet.isConnected() && botwallet.hasWallet()) {
-        await botwallet.connect(); // 钱包弹授权框
-        await botwallet.ensureChain().catch(() => {});
-        renderWalletArea();
-      }
-      if (botwallet.isConnected() && oc.st.walletDirect) {
-        // —— C 端钱包直发：页面取 calldata → 钱包签名 → 广播 → 回填对账 ——
-        toast('请在钱包里确认这笔 BOT 主网交易（合约只收到一个承诺哈希）…');
-        const { txHash } = await sealViaWallet(anchorId);
-        toast(`已由你的钱包发上主网：${txHash.slice(0, 12)}… 等待确认`);
-        startSealPolling();
-        route();
-      } else {
-        // —— 服务端路径：auto 模式由统一 relayer 代发；manual 模式给出可直接发送的 calldata ——
-        const r = await api('POST', `/api/chain/onchain/${encodeURIComponent(anchorId)}`);
-        if (r.manual) {
-          openModal(`<h3>手动提交到 BOT 主网</h3>
-            <p class="muted tiny" style="margin:6px 0 10px">向合约 <b>${esc(r.manual.contract)}</b>（链 ${r.manual.chainId}）发送以下调用数据（seal 函数，参数只有一个 32 字节承诺哈希）：</p>
-            <div class="chain-hash" style="word-break:break-all">${r.manual.calldata}</div>
-            <p class="muted tiny">用任意 EVM 钱包（MetaMask / Remix）发送后，把交易哈希回填给管理员即可自动确认。</p>
-            <div class="btn-row"><button class="btn ghost" onclick="closeModal()">好</button></div>`);
-        } else {
-          toast('已加入提交队列，由服务端代提交（约 15 秒内发送）');
-          startSealPolling();
-          route();
-        }
-      }
+      if (!botwallet.isConnected()) await botwallet.connect();
+      await botwallet.ensureChain();
+      renderWalletArea();
+      toast('正在模拟合约调用，通过后请在钱包中确认…');
+      const { txHash } = await sealViaWallet(anchorId);
+      toast(`已由你的钱包发上主网：${txHash.slice(0, 12)}… 等待确认`);
+      startSealPolling();
+      route();
     } catch (e) {
       toast(e.message);
+    } finally {
+      if (button?.isConnected) button.disabled = false;
     }
   }
 

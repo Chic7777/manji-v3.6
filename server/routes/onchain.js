@@ -5,6 +5,7 @@
 //   3. 任何时刻都可以用「核验」向公共链直接提问（eth_call sealOf），不依赖本应用存活；
 //   4. 未配置时所有接口如实返回不可用，绝不影响本地永恒之链。
 import { db } from '../db.js';
+import { config } from '../config.js';
 import { errors, audit } from '../core.js';
 import { currentHome } from '../domain/permissions.js';
 import { canViewAnchoredRecord } from './chain.js';
@@ -15,7 +16,7 @@ import {
 } from '../domain/public-chain.js';
 
 const PRIVACY_NOTE =
-  '提交到公共链的只有承诺哈希（SHA-256(域名‖内容‖随机盐)）：没有正文、照片、成员身份或关系状态。交易由统一代提交账户发送，你们的地址不会出现在交易里。承诺一旦上链永远无法撤回——这是它可信的原因，也请只在你想清楚后提交。';
+  '提交到公共链的只有承诺哈希，不含正文和照片。钱包直发时，发起钱包地址公开可见；服务端代发是另一条独立路径。主网成功登记后不可撤回。';
 
 function requireConfigured() {
   if (onchainMode() === 'off') {
@@ -69,6 +70,15 @@ function sealPayload(row) {
 }
 
 export const routes = {
+  // 无 RPC 依赖的公开配置，避免 RPC 故障导致入口消失；不暴露任何密钥。
+  'GET /api/public/onchain/config': async () => ({
+    status: 200, data: { data: {
+      configured: onchainMode() !== 'off',
+      chainId: config.onchain.chainId,
+      contract: config.onchain.contract,
+      explorer: explorerBase(),
+    } },
+  }),
   /** 公开核验门户（免登录）：链上事实一览——合约、链、主网登记总数。不含任何应用内部数据 */
   'GET /api/public/onchain/info': async () => {
     const info = await withRpcErrors(() => publicChainInfo());
@@ -86,7 +96,7 @@ export const routes = {
       throw errors.invalid({ hash: '需要 64 位十六进制的承诺哈希或交易哈希' }, '哈希格式无效');
     }
     const result = await withRpcErrors(() => publicLookup(input));
-    return { status: 200, data: { data: { input: '0x' + input, ...result, chain: { chainId: Number(process.env.ONCHAIN_CHAIN_ID), contract: process.env.ONCHAIN_CONTRACT, explorer: explorerBase() } } } };
+    return { status: 200, data: { data: { input: '0x' + input, ...result, chain: { chainId: config.onchain.chainId, contract: config.onchain.contract, explorer: explorerBase() } } } };
   },
 
   /** 公共链配置与队列总览（登录即可看；不涉及任何内容） */
@@ -119,8 +129,8 @@ export const routes = {
           mode,
           modeText: { off: '未配置', manual: '手动提交模式', auto: '自动代提交模式' }[mode],
           contractName: CONTRACT_NAME,
-          chainId: mode === 'off' ? null : Number(process.env.ONCHAIN_CHAIN_ID) || null,
-          contract: mode === 'off' ? null : process.env.ONCHAIN_CONTRACT || null,
+          chainId: mode === 'off' ? null : config.onchain.chainId,
+          contract: mode === 'off' ? null : config.onchain.contract,
           explorer: mode === 'off' ? null : explorerBase(),
           // v2+ 合约开放 seal 写权限：页面可让用户连接自己的钱包直接签名上链（C 端主网交互）
           walletDirect: mode === 'off' ? null : await walletDirectSupported(),
@@ -156,8 +166,8 @@ export const routes = {
     if (onchainMode() === 'manual') {
       // 手动模式：给出可直接粘贴到 Remix/MetaMask 的调用数据（内容只有一个 32 字节承诺哈希，可肉眼审阅）
       result.manual = {
-        contract: process.env.ONCHAIN_CONTRACT,
-        chainId: Number(process.env.ONCHAIN_CHAIN_ID),
+        contract: config.onchain.contract,
+        chainId: config.onchain.chainId,
         calldata: buildSealCalldata(a.commitment),
         note: '用任意 EVM 钱包向上述合约地址发送这笔 calldata（合约的 seal 函数），拿到交易哈希后回来「回填交易」。',
       };
@@ -172,6 +182,10 @@ export const routes = {
   'GET /api/chain/onchain/seal-calldata/:anchorId': async (ctx) => {
     requireConfigured();
     const a = requireAnchor(ctx);
+    const existing = sealRowOf(a.id);
+    if (existing && ['submitted', 'confirmed'].includes(existing.status)) {
+      throw errors.conflict('TRANSACTION_EXISTS', '这条存证已有主网交易，请先查询原交易状态，勿重复发送');
+    }
     audit(ctx.user.id, 'onchain-calldata', a.record_type, a.record_id, a.revision);
     return {
       status: 200,
@@ -179,8 +193,8 @@ export const routes = {
         data: {
           anchorId: a.id,
           commitment: a.commitment,
-          contract: process.env.ONCHAIN_CONTRACT,
-          chainId: Number(process.env.ONCHAIN_CHAIN_ID),
+          contract: config.onchain.contract,
+          chainId: config.onchain.chainId,
           calldata: buildSealCalldata(a.commitment),
           explorer: explorerBase(),
           walletDirect: await walletDirectSupported(),
@@ -202,6 +216,7 @@ export const routes = {
     if (!/^[0-9a-f]{64}$/.test(txHash)) {
       throw errors.invalid({ txHash: '交易哈希必须是 64 位十六进制' }, '交易哈希格式无效');
     }
+    if (!sealRowOf(a.id)) enqueueSeal(a);
     const row = bindTx(a.id, txHash);
     audit(ctx.user.id, 'onchain-bind', a.record_type, a.record_id, row.status, a.revision);
     return { status: 200, data: { data: sealPayload(row) } };
