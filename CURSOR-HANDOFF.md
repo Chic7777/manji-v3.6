@@ -1,5 +1,12 @@
 # 慢记 Manji：Cursor 继续工作提示词
 
+> **2026-10-15 进展（以此为准，覆盖下文中的旧判断）**
+> - 指定合约链上 `VERSION()` 为 `"1"`，`owner`/`relayer` 均为 `0x4844f22482b0e08dc9b44d153a723863f576b178`，只有该地址能 `seal`，其他钱包回退 `Unauthorized(address)`。
+> - 负责人已用该钱包完成首笔真实业务交易：`0x43a2d644834379e3c31a89ff3703ac625785e8e92844054ee9653a03e917ef0c`，回执成功，`Sealed` 承诺与日记一致，序号 #2。
+> - manji.grok.me 实际运行 v4.2（含「真心话邮箱」，无主网功能），本仓库是 v3.6.6，两者已分叉。应先请队友从 Grok 导出 v4.2 代码，再把钱包与主网功能合入，不要用本仓库覆盖原站。
+> - 本机访问 `rpc.botchain.ai` 需走代理 `127.0.0.1:7897`（DNS 被污染）。
+> - 现状与说明以 README.md 为准。
+
 把下面这段直接交给 Cursor Agent。请先用 Cursor 打开 `D:\codexfile\creation\manji\app`，这是实际 Git 仓库；上一级的 review-source、source、live-app.js 等是先前审查材料，不是当前源码。
 
 ---
